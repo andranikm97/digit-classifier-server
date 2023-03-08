@@ -1,57 +1,69 @@
 import os
-from flask import Flask, request, Response
-from flask_cors import CORS
-import tensorflow as tf 
-from PIL import Image
-import numpy as np
 import uuid
-import csv
-from datetime import datetime
-from pathlib import Path
+
+import torch
+from flask import Flask, Response, make_response, request
+from flask_cors import CORS
+from PIL import Image
+
+from tools.model import Model, predict
+from tools.utils import Cache, prepareImage
+
+# from datetime import datetime
+# from pathlib import Path
+
 
 app = Flask(__name__)
 CORS(app)
 
-model = tf.keras.models.load_model('model')
-cached_images = {}
+model = Model()
+model.load_state_dict(torch.load("model/state.pt"))
+cache = Cache()
+
 
 @app.get("/")
 def getIndex():
     return 'Method {}'.format(request.method)
 
+
 @app.post("/recognize")
 def parseImage():
     data = request.files['data']
-    image = Image.open(data)
-    image = image.resize((28,28))
-    image = np.asarray(image)[:,:,0].reshape(1,784)
-    imageId = uuid.uuid4()
-    cached_images[imageId] = {
-        "x": image,
-        "y": ""
-    }
-    image = image / 255.
-    prediction = np.argmax(tf.nn.softmax(model.predict(image, verbose=0)))
-    return {
+    image = prepareImage(Image.open(data))
+    imageCacheId = cache.addImage(image)
+
+    try:
+        prediction = predict(model, image)
+    except Exception as e:
+        prediction = -1
+        print('Prediction failed:', e)
+
+    response = make_response({
         "prediction": str(prediction),
-        "backend_id": imageId
-    }
+        "backend_id": imageCacheId
+    })
+
+    return response
+
 
 @app.put("/train")
 def trainModel():
     data = request.json
     imageId = uuid.UUID(data['backend_id'])
-    correctLabel = data['label']
-    print(imageId, correctLabel)
-    if imageId and cached_images[imageId]:
-        with open('newExamples.csv', 'a') as f:
-            w = csv.DictWriter(f, ['x', 'y', 'trained', 'datetimestamp'])
-            w.writerow({
-                "x": cached_images[imageId]["x"],
-                "y": correctLabel,
-                "trained": 0,
-                "datetimestamp": str(datetime.now())
-            })
-            del cached_images[imageId]
-            f.close()
+    # cache.addImage(ima)
+#     correctLabel = data['label']
+#     # if imageId and cached_images[imageId]:
+#         # store_new_example(cached_images[imageId]['image'], correctLabel)
+#         # del cached_images[imageId]
     return Response("", status=200)
+
+
+@app.post('/clear_image')
+def clearImage():
+    data = request.json
+    id = data['imageId']
+    cache.removeImage(id)
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))

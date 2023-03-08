@@ -1,0 +1,18 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[scripts]
+dev = "flask --app app.py run --reload"
+
+[packages]
+flask = "==2.2.*"
+gunicorn = "==20.1.0"
+flask-cors = "*"
+pillow = "*"
+numpy = "*"
+torch = {file = "https://download.pytorch.org/whl/cpu/torch-1.11.0-cp310-none-macosx_10_9_x86_64.whl"}
+
+[dev-packages]
+autopep8 = "*"
