@@ -2,3 +2,6 @@ __pycache__
 venv
 run
 deploy
+arr.pkl
+obj.pkl
+pickle.py

@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, Response
+from flask import Flask, request, Response, make_response
 from flask_cors import CORS
 import tensorflow as tf 
 from PIL import Image
@@ -8,6 +8,7 @@ import uuid
 import csv
 from datetime import datetime
 from pathlib import Path
+from db.controllers import store_new_example
 
 app = Flask(__name__)
 CORS(app)
@@ -27,33 +28,25 @@ def parseImage():
     image = np.asarray(image)[:,:,0].reshape(1,784)
     imageId = uuid.uuid4()
     cached_images[imageId] = {
-        "x": image,
-        "y": ""
+        "image": image,
+        "label": ""
     }
     image = image / 255.
     prediction = np.argmax(tf.nn.softmax(model.predict(image, verbose=0)))
-    return {
+    response = make_response({
         "prediction": str(prediction),
         "backend_id": imageId
-    }
+    })
+    return response
 
 @app.put("/train")
 def trainModel():
     data = request.json
     imageId = uuid.UUID(data['backend_id'])
     correctLabel = data['label']
-    print(imageId, correctLabel)
     if imageId and cached_images[imageId]:
-        with open('newExamples.csv', 'a') as f:
-            w = csv.DictWriter(f, ['x', 'y', 'trained', 'datetimestamp'])
-            w.writerow({
-                "x": cached_images[imageId]["x"],
-                "y": correctLabel,
-                "trained": 0,
-                "datetimestamp": str(datetime.now())
-            })
-            del cached_images[imageId]
-            f.close()
+        store_new_example(cached_images[imageId]['image'], correctLabel)
+        del cached_images[imageId]
     return Response("", status=200)
 
 if __name__ == "__main__":
