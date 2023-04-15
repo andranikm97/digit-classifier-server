@@ -1,24 +1,23 @@
 import os
-import uuid
 
+import torch
 from flask import Flask, Response, make_response, request
 from flask_cors import CORS
 from PIL import Image
 
-from model.tools import initModel, predict
+import model.mnist
+from model.mnist import predict, train_model
 from utils import Cache, prepareImage
 
 app = Flask(__name__)
 CORS(app)
 
-model = initModel()
 cache = Cache()
 
 
 @app.get("/")
 def getIndex():
     return "Method {}".format(request.method)
-
 
 @app.post("/recognize")
 def parseImage():
@@ -27,7 +26,7 @@ def parseImage():
     imageCacheId = cache.addImage(image)
 
     try:
-        prediction = predict(model, image)
+        prediction = predict(image)
     except Exception as e:
         prediction = -1
         print("Prediction failed:", e)
@@ -42,12 +41,14 @@ def parseImage():
 @app.put("/train")
 def trainModel():
     data = request.json
-    imageId = uuid.UUID(data["backend_id"])
-    # cache.addImage(ima)
-    #     correctLabel = data['label']
-    #     # if imageId and cached_images[imageId]:
-    #         # store_new_example(cached_images[imageId]['image'], correctLabel)
-    #         # del cached_images[imageId]
+    imageId = data["backend_id"]
+    label = data["label"]
+    image = cache.getImage(imageId)
+
+    image = torch.tensor(image).to(torch.float32)
+    label = torch.tensor([int(label)])
+
+    train_model(image, label)
     return Response("", status=200)
 
 

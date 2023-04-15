@@ -17,9 +17,10 @@ class Cache:
         id = uuid.UUID(id)
         if id in self.cache:
             return self.cache[id]
+        
     def addImage(self, image):
         id = uuid.uuid4()
-        self.cache[id] = {"image": image, "label": ""}
+        self.cache[id] = image
         return id
 
     def removeImage(self, id):

@@ -7,6 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/1SN5ij_rJSP2Zu8NBMtEGxDRbp1dKuztt
 """
 
+import os
+
 import torch
 from torch import nn, optim
 
@@ -27,42 +29,59 @@ class NeuralNetwork(nn.Module):
     out = self.linear(h3)
     return out
 
-model = NeuralNetwork()
-model.to(device)
+checkpoint_path = None
+if os.path.exists('model/extended.pt'):
+  checkpoint_path = "model/extended.pt"
+else:
+  checkpoint_path = "model/original.pt"
 
-params = model.parameters()
-optimiser = optim.Adam(params, lr=0.01)
+checkpoint = torch.load(checkpoint_path, map_location=torch.device(device))
+
+model = NeuralNetwork()
+model_state_dict = checkpoint["model_state_dict"]
+model.load_state_dict(model_state_dict)
+
+optimiser = optim.Adam(model.parameters(), lr=0.01)
+optimizer_state_dict = checkpoint["optimizer_state_dict"]
+optimiser.load_state_dict(optimizer_state_dict)
 
 loss_fn = nn.CrossEntropyLoss()
 
-def evaluate_model(model, data_loader):
-  model.eval()
-  
-  losses = list()
-  accuracies = list()
-
-  for batch in data_loader:
-    x, y = batch
-
-    with torch.no_grad():
-      logits = model(x.to(device))
-    
-      J = loss_fn(logits, y.to(device))
-
-      losses.append(J.item())
-      accuracies.append(y.eq(logits.detach().argmax(dim=1).cpu()).float().mean())
-
-  loss = torch.tensor(losses).mean().float()
-  accuracy = torch.tensor(accuracies).mean().float()
-  model.train()
-  return loss, accuracy
-
-
-def train_model(model, X, Y):
+def train_model(X, Y):
   model.train()
   logits = model(X)
   J = loss_fn(logits, Y)
   model.zero_grad()
   J.backward()
   optimiser.step()
-  return model
+
+  saveModel()
+  return model, optimiser
+
+def predict(example):
+  example = torch.tensor(example)
+  example = example / 255.0
+  if example.dtype == torch.float64:
+      example = example.to(torch.float32)
+  model.eval()
+  with torch.no_grad():
+      output = model(example)
+  model.train()
+  output = torch.argmax(torch.nn.Softmax(dim=1)(output)).item()
+  return output
+
+def saveModel():
+  nOfNewExamples = 0
+  
+  if os.path.exists('model/extended.pt'):
+    current = torch.load('model/extended.pt', map_location=torch.device(device))
+    nOfNewExamples = current['numberOfNewExamples']
+  
+  state = {
+  'model_state_dict': model.state_dict(),
+  'optimizer_state_dict': optimiser.state_dict(),
+  'numberOfNewExamples': nOfNewExamples + 1
+  }
+
+  torch.save(state, 'model/extended.pt')
+  return
